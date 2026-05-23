@@ -1,0 +1,103 @@
+#chapter-navigator {
+  position: fixed;
+  right: 18px;
+  bottom: 92px;
+  z-index: 3005;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: min(240px, calc(100vw - 28px));
+  padding: 10px;
+  color: var(--SmartThemeBodyColor, #e8e8e8);
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #777) 58%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+}
+
+#chapter-navigator .chapter-navigator-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0.82;
+}
+
+#chapter-navigator .chapter-navigator-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: inherit;
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 55%, transparent);
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+#chapter-navigator .chapter-navigator-button:hover:not(:disabled),
+#chapter-navigator .chapter-navigator-button:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 36%, transparent);
+}
+
+#chapter-navigator .chapter-navigator-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+#chapter-navigator .chapter-navigator-select {
+  min-height: 32px;
+  width: 100%;
+  padding: 5px 7px;
+  color: var(--SmartThemeBodyColor, #e8e8e8);
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #777) 60%, transparent);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+}
+
+#chapter-navigator .chapter-navigator-counter,
+#chapter-navigator .chapter-navigator-empty {
+  min-height: 16px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+#chapter-navigator.is-empty .chapter-navigator-select {
+  display: none;
+}
+
+.chapter-navigator-flash {
+  animation: chapter-navigator-flash 1.6s ease-out;
+}
+
+@keyframes chapter-navigator-flash {
+  0% {
+    box-shadow: inset 4px 0 0 var(--SmartThemeQuoteColor, #4f8cff);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 18%, transparent);
+  }
+
+  100% {
+    box-shadow: inset 4px 0 0 transparent;
+    background-color: transparent;
+  }
+}
+
+@media (max-width: 700px) {
+  #chapter-navigator {
+    right: 8px;
+    bottom: 74px;
+    width: min(210px, calc(100vw - 16px));
+    padding: 8px;
+  }
+
+  #chapter-navigator .chapter-navigator-title {
+    display: none;
+  }
+}
