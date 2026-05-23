@@ -13,6 +13,7 @@ let updateTimer;
 let cachedMessages = [];
 let cachedSignature = '';
 let currentMessageIndex = -1;
+let currentMessageId = -1;
 let eventsBound = false;
 const cleanupCallbacks = [];
 
@@ -26,6 +27,13 @@ function getChatElement() {
 
 function getMessageElementById(messageId) {
     return document.querySelector(`.mes[mesid="${messageId}"]`);
+}
+
+function getLoadedMessageIds() {
+    return Array.from(document.querySelectorAll('#chat .mes[mesid]'))
+        .map(message => Number(message.getAttribute('mesid')))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
 }
 
 function normalizeText(text) {
@@ -159,12 +167,14 @@ function updateMessageSelect(messages) {
 
 function updateUi() {
     const messages = collectMessages();
-    const hasMessages = messages.length > 0;
+    const loadedMessageIds = getLoadedMessageIds();
+    currentMessageId = getVisibleAnchorMessageId();
+    const hasMessages = messages.length > 0 || loadedMessageIds.length > 0 || currentMessageId >= 0;
 
     root.classList.toggle('is-empty', !hasMessages);
     prevButton.disabled = !hasMessages;
     nextButton.disabled = !hasMessages;
-    messageSelect.disabled = !hasMessages;
+    messageSelect.disabled = !messages.length;
     emptyHint.hidden = hasMessages;
 
     if (!hasMessages) {
@@ -174,16 +184,25 @@ function updateUi() {
 
     updateMessageSelect(messages);
     currentMessageIndex = getCurrentMessageIndex(messages);
-    messageSelect.value = String(currentMessageIndex);
-    counter.textContent = `${currentMessageIndex + 1} / ${messages.length}`;
-    prevButton.disabled = currentMessageIndex <= 0;
-    nextButton.disabled = currentMessageIndex >= messages.length - 1;
+    if (messages.length) {
+        messageSelect.value = String(currentMessageIndex);
+    }
+
+    const displayId = currentMessageId >= 0
+        ? currentMessageId + 1
+        : currentMessageIndex + 1;
+    counter.textContent = messages.length > displayId
+        ? `${displayId} / ${messages.length}`
+        : `当前 ${displayId}`;
+
+    prevButton.disabled = currentMessageId <= 0 && currentMessageIndex <= 0;
+    nextButton.disabled = false;
     prevButton.title = currentMessageIndex > 0
         ? `上一条：${messages[currentMessageIndex - 1].label}`
         : '已经是第一条';
     nextButton.title = currentMessageIndex < messages.length - 1
         ? `下一条：${messages[currentMessageIndex + 1].label}`
-        : '已经是最后一条';
+        : '跳到下一条聊天记录';
 }
 
 function scheduleUpdate() {
@@ -262,9 +281,15 @@ function jumpToMessageIndex(index) {
 }
 
 function jumpByOffset(offset) {
+    const anchorMessageId = getVisibleAnchorMessageId();
+
+    if (anchorMessageId >= 0) {
+        jumpToMessage(Math.max(0, anchorMessageId + offset));
+        return;
+    }
+
     const messages = collectMessages();
     const index = getCurrentMessageIndex(messages);
-
     if (index < 0) {
         return;
     }
