@@ -7,7 +7,7 @@
   "css": "style.css",
   "author": "keyiii",
   "version": "0.1.0",
-  "homePage": "https://github.com/your-name/SillyTavern-ChapterNavigator",
+  "homePage": "https://github.com/ViaEasy/SillyTavern-ChapterNavigator",
   "auto_update": false,
   "minimum_client_version": "1.13.0",
   "hooks": {

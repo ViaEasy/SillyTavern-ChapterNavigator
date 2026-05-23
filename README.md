@@ -23,7 +23,7 @@ Extensions -> Install Extension
 填入你的仓库地址，例如：
 
 ```text
-https://github.com/your-name/SillyTavern-ChapterNavigator
+https://github.com/ViaEasy/SillyTavern-ChapterNavigator
 ```
 
 ### 本地安装
@@ -71,4 +71,3 @@ index.js
 style.css
 README.md
 ```
-
