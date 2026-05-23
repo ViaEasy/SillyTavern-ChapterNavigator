@@ -23,6 +23,7 @@ let currentMessageId = -1;
 let eventsBound = false;
 let isPanelOpen = false;
 let dragState = null;
+let suppressLauncherClick = false;
 const cleanupCallbacks = [];
 
 function getContext() {
@@ -440,10 +441,11 @@ function createLauncher() {
     launcher.append(document.createElement('span'));
     launcher.querySelector('span').textContent = '导航';
     launcher.addEventListener('click', () => {
-        if (dragState?.moved) {
-            dragState.moved = false;
+        if (suppressLauncherClick) {
+            suppressLauncherClick = false;
             return;
         }
+
         togglePanel();
     });
     launcher.addEventListener('pointerdown', handleLauncherPointerDown);
@@ -491,12 +493,38 @@ function handleLauncherPointerUp(event) {
         return;
     }
 
-    launcher.releasePointerCapture(event.pointerId);
+    const moved = dragState.moved;
+    if (launcher.hasPointerCapture(event.pointerId)) {
+        launcher.releasePointerCapture(event.pointerId);
+    }
     launcher.classList.remove('is-dragging');
+    dragState = null;
+
+    if (moved) {
+        suppressLauncherClick = true;
+        setTimeout(() => {
+            suppressLauncherClick = false;
+        }, 0);
+    }
+}
+
+function cancelLauncherDrag() {
+    dragState = null;
+    launcher?.classList.remove('is-dragging');
+}
+
+function handleLauncherPointerCancel(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+    }
+
+    if (launcher.hasPointerCapture(event.pointerId)) {
+        launcher.releasePointerCapture(event.pointerId);
+    }
+
+    cancelLauncherDrag();
     setTimeout(() => {
-        if (dragState) {
-            dragState.moved = false;
-        }
+        suppressLauncherClick = false;
     }, 0);
 }
 
@@ -571,13 +599,13 @@ function bindEvents() {
     window.addEventListener('resize', scheduleUpdate);
     window.addEventListener('pointermove', handleLauncherPointerMove);
     window.addEventListener('pointerup', handleLauncherPointerUp);
-    window.addEventListener('pointercancel', handleLauncherPointerUp);
+    window.addEventListener('pointercancel', handleLauncherPointerCancel);
     cleanupCallbacks.push(() => chat?.removeEventListener('scroll', scheduleUpdate));
     cleanupCallbacks.push(() => window.removeEventListener('scroll', scheduleUpdate));
     cleanupCallbacks.push(() => window.removeEventListener('resize', scheduleUpdate));
     cleanupCallbacks.push(() => window.removeEventListener('pointermove', handleLauncherPointerMove));
     cleanupCallbacks.push(() => window.removeEventListener('pointerup', handleLauncherPointerUp));
-    cleanupCallbacks.push(() => window.removeEventListener('pointercancel', handleLauncherPointerUp));
+    cleanupCallbacks.push(() => window.removeEventListener('pointercancel', handleLauncherPointerCancel));
 
     if (chat) {
         chatObserver = new MutationObserver(scheduleUpdate);
@@ -627,6 +655,7 @@ function unbindEvents() {
 
 export function onDisable() {
     unbindEvents();
+    cancelLauncherDrag();
     document.getElementById(ROOT_ID)?.remove();
     document.getElementById(LAUNCHER_ID)?.remove();
 }
