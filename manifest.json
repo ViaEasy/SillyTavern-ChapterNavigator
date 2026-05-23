@@ -1,14 +1,14 @@
 {
-  "display_name": "Chapter Navigator",
+  "display_name": "Message Navigator",
   "loading_order": 100,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "css": "style.css",
   "author": "keyiii",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "homePage": "https://github.com/ViaEasy/SillyTavern-ChapterNavigator",
-  "auto_update": false,
+  "auto_update": true,
   "minimum_client_version": "1.13.0",
   "hooks": {
     "enable": "onEnable",

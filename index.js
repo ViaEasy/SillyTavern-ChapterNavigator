@@ -1,31 +1,18 @@
-const EXTENSION_NAME = 'Chapter Navigator';
+const EXTENSION_NAME = 'Message Navigator';
 const ROOT_ID = 'chapter-navigator';
-const CHAPTER_TITLE_LIMIT = 96;
-const CN_NUM = '零〇○Ｏ一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟0-9';
-const CHAPTER_TITLE_RE = new RegExp(
-    '^\\s*(?:'
-    + `第[${CN_NUM}]+[章节回卷部集篇]\\s*[^\\n]{0,${CHAPTER_TITLE_LIMIT}}`
-    + '|'
-    + `[卷部集篇][${CN_NUM}]+\\s*[^\\n]{0,${CHAPTER_TITLE_LIMIT}}`
-    + '|'
-    + `(?:chapter|chap\\.?)\\s*\\d+\\s*(?:[:：.\\-])?\\s*[^\\n]{0,${CHAPTER_TITLE_LIMIT}}`
-    + '|'
-    + `(?:序章|楔子|引子|前言|尾声|后记|後記|番外[${CN_NUM}]*)\\s*[^\\n]{0,${CHAPTER_TITLE_LIMIT}}`
-    + ')\\s*$',
-    'i',
-);
+const MESSAGE_PREVIEW_LIMIT = 72;
 
 let root;
 let prevButton;
 let nextButton;
-let chapterSelect;
+let messageSelect;
 let counter;
 let emptyHint;
 let chatObserver;
 let updateTimer;
-let cachedChapters = [];
+let cachedMessages = [];
 let cachedSignature = '';
-let currentChapterIndex = -1;
+let currentMessageIndex = -1;
 let eventsBound = false;
 const cleanupCallbacks = [];
 
@@ -37,8 +24,12 @@ function getChatElement() {
     return document.getElementById('chat');
 }
 
-function normalizeTitle(title) {
-    return String(title ?? '').replace(/[ \t\u3000]+/g, ' ').trim();
+function getMessageElementById(messageId) {
+    return document.querySelector(`.mes[mesid="${messageId}"]`);
+}
+
+function normalizeText(text) {
+    return String(text ?? '').replace(/[ \t\u3000]+/g, ' ').trim();
 }
 
 function getMessageText(message) {
@@ -53,22 +44,18 @@ function getMessageText(message) {
     return String(message.mes ?? '');
 }
 
-function extractChapterTitle(text) {
-    const firstLine = String(text ?? '')
+function getMessagePreview(message, index) {
+    const name = normalizeText(message?.name) || (message?.is_user ? 'User' : 'AI');
+    const firstLine = String(getMessageText(message))
         .replace(/\r\n/g, '\n')
         .split('\n')
-        .map(line => normalizeTitle(line))
-        .find(Boolean);
+        .map(line => normalizeText(line))
+        .find(Boolean) || '(空消息)';
+    const clipped = firstLine.length > MESSAGE_PREVIEW_LIMIT
+        ? `${firstLine.slice(0, MESSAGE_PREVIEW_LIMIT)}...`
+        : firstLine;
 
-    if (!firstLine || firstLine.length > CHAPTER_TITLE_LIMIT + 20) {
-        return '';
-    }
-
-    return CHAPTER_TITLE_RE.test(firstLine) ? firstLine : '';
-}
-
-function getMessageElementById(messageId) {
-    return document.querySelector(`.mes[mesid="${messageId}"]`);
+    return `${index + 1}. ${name}: ${clipped}`;
 }
 
 function getVisibleAnchorMessageId() {
@@ -108,32 +95,30 @@ function getVisibleAnchorMessageId() {
 
 function makeSignature(chatLog) {
     return chatLog
-        .map((message, index) => `${index}:${getMessageText(message).slice(0, 120)}`)
+        .map((message, index) => `${index}:${message?.name ?? ''}:${getMessageText(message).slice(0, 120)}`)
         .join('|');
 }
 
-function collectChapters() {
+function collectMessages() {
     const context = getContext();
     const chatLog = Array.isArray(context.chat) ? context.chat : [];
     const signature = makeSignature(chatLog);
 
     if (signature === cachedSignature) {
-        return cachedChapters;
+        return cachedMessages;
     }
 
     cachedSignature = signature;
-    cachedChapters = chatLog
-        .map((message, index) => ({
-            id: index,
-            title: extractChapterTitle(getMessageText(message)),
-        }))
-        .filter(chapter => chapter.title);
+    cachedMessages = chatLog.map((message, index) => ({
+        id: index,
+        label: getMessagePreview(message, index),
+    }));
 
-    return cachedChapters;
+    return cachedMessages;
 }
 
-function getCurrentChapterIndex(chapters = collectChapters()) {
-    if (!chapters.length) {
+function getCurrentMessageIndex(messages = collectMessages()) {
+    if (!messages.length) {
         return -1;
     }
 
@@ -143,8 +128,8 @@ function getCurrentChapterIndex(chapters = collectChapters()) {
     }
 
     let index = 0;
-    for (let i = 0; i < chapters.length; i += 1) {
-        if (chapters[i].id <= anchorMessageId) {
+    for (let i = 0; i < messages.length; i += 1) {
+        if (messages[i].id <= anchorMessageId) {
             index = i;
         } else {
             break;
@@ -154,51 +139,51 @@ function getCurrentChapterIndex(chapters = collectChapters()) {
     return index;
 }
 
-function updateChapterSelect(chapters) {
-    const optionsSignature = chapters.map(chapter => `${chapter.id}:${chapter.title}`).join('|');
+function updateMessageSelect(messages) {
+    const optionsSignature = messages.map(message => `${message.id}:${message.label}`).join('|');
 
-    if (chapterSelect.dataset.signature === optionsSignature) {
+    if (messageSelect.dataset.signature === optionsSignature) {
         return;
     }
 
-    chapterSelect.dataset.signature = optionsSignature;
-    chapterSelect.innerHTML = '';
+    messageSelect.dataset.signature = optionsSignature;
+    messageSelect.innerHTML = '';
 
-    for (let i = 0; i < chapters.length; i += 1) {
+    for (let i = 0; i < messages.length; i += 1) {
         const option = document.createElement('option');
         option.value = String(i);
-        option.textContent = `${i + 1}. ${chapters[i].title}`;
-        chapterSelect.appendChild(option);
+        option.textContent = messages[i].label;
+        messageSelect.appendChild(option);
     }
 }
 
 function updateUi() {
-    const chapters = collectChapters();
-    const hasChapters = chapters.length > 0;
+    const messages = collectMessages();
+    const hasMessages = messages.length > 0;
 
-    root.classList.toggle('is-empty', !hasChapters);
-    prevButton.disabled = !hasChapters;
-    nextButton.disabled = !hasChapters;
-    chapterSelect.disabled = !hasChapters;
-    emptyHint.hidden = hasChapters;
+    root.classList.toggle('is-empty', !hasMessages);
+    prevButton.disabled = !hasMessages;
+    nextButton.disabled = !hasMessages;
+    messageSelect.disabled = !hasMessages;
+    emptyHint.hidden = hasMessages;
 
-    if (!hasChapters) {
+    if (!hasMessages) {
         counter.textContent = '0 / 0';
         return;
     }
 
-    updateChapterSelect(chapters);
-    currentChapterIndex = getCurrentChapterIndex(chapters);
-    chapterSelect.value = String(currentChapterIndex);
-    counter.textContent = `${currentChapterIndex + 1} / ${chapters.length}`;
-    prevButton.disabled = currentChapterIndex <= 0;
-    nextButton.disabled = currentChapterIndex >= chapters.length - 1;
-    prevButton.title = currentChapterIndex > 0
-        ? `上一章：${chapters[currentChapterIndex - 1].title}`
-        : '已经是第一章';
-    nextButton.title = currentChapterIndex < chapters.length - 1
-        ? `下一章：${chapters[currentChapterIndex + 1].title}`
-        : '已经是最后一章';
+    updateMessageSelect(messages);
+    currentMessageIndex = getCurrentMessageIndex(messages);
+    messageSelect.value = String(currentMessageIndex);
+    counter.textContent = `${currentMessageIndex + 1} / ${messages.length}`;
+    prevButton.disabled = currentMessageIndex <= 0;
+    nextButton.disabled = currentMessageIndex >= messages.length - 1;
+    prevButton.title = currentMessageIndex > 0
+        ? `上一条：${messages[currentMessageIndex - 1].label}`
+        : '已经是第一条';
+    nextButton.title = currentMessageIndex < messages.length - 1
+        ? `下一条：${messages[currentMessageIndex + 1].label}`
+        : '已经是最后一条';
 }
 
 function scheduleUpdate() {
@@ -264,10 +249,10 @@ async function jumpToMessage(messageId) {
     waitForElement();
 }
 
-function jumpToChapter(index) {
-    const chapters = collectChapters();
-    const nextIndex = Math.max(0, Math.min(index, chapters.length - 1));
-    const target = chapters[nextIndex];
+function jumpToMessageIndex(index) {
+    const messages = collectMessages();
+    const nextIndex = Math.max(0, Math.min(index, messages.length - 1));
+    const target = messages[nextIndex];
 
     if (!target) {
         return;
@@ -277,14 +262,14 @@ function jumpToChapter(index) {
 }
 
 function jumpByOffset(offset) {
-    const chapters = collectChapters();
-    const index = getCurrentChapterIndex(chapters);
+    const messages = collectMessages();
+    const index = getCurrentMessageIndex(messages);
 
     if (index < 0) {
         return;
     }
 
-    jumpToChapter(index + offset);
+    jumpToMessageIndex(index + offset);
 }
 
 function createIcon(className) {
@@ -313,15 +298,15 @@ function createUi() {
 
     const title = document.createElement('div');
     title.className = 'chapter-navigator-title';
-    title.textContent = '章节导航';
+    title.textContent = '消息导航';
 
-    prevButton = createButton('上一章', 'chapter-navigator-button chapter-navigator-prev', () => jumpByOffset(-1));
-    nextButton = createButton('下一章', 'chapter-navigator-button chapter-navigator-next', () => jumpByOffset(1));
+    prevButton = createButton('上一条', 'chapter-navigator-button chapter-navigator-prev', () => jumpByOffset(-1));
+    nextButton = createButton('下一条', 'chapter-navigator-button chapter-navigator-next', () => jumpByOffset(1));
 
-    chapterSelect = document.createElement('select');
-    chapterSelect.className = 'chapter-navigator-select';
-    chapterSelect.title = '跳转到指定章节';
-    chapterSelect.addEventListener('change', () => jumpToChapter(Number(chapterSelect.value)));
+    messageSelect = document.createElement('select');
+    messageSelect.className = 'chapter-navigator-select';
+    messageSelect.title = '跳转到指定消息';
+    messageSelect.addEventListener('change', () => jumpToMessageIndex(Number(messageSelect.value)));
 
     counter = document.createElement('div');
     counter.className = 'chapter-navigator-counter';
@@ -329,10 +314,10 @@ function createUi() {
 
     emptyHint = document.createElement('div');
     emptyHint.className = 'chapter-navigator-empty';
-    emptyHint.textContent = '没识别到章节标题';
+    emptyHint.textContent = '没有聊天记录';
     emptyHint.hidden = true;
 
-    root.append(title, prevButton, chapterSelect, nextButton, counter, emptyHint);
+    root.append(title, prevButton, messageSelect, nextButton, counter, emptyHint);
     document.body.appendChild(root);
 }
 
