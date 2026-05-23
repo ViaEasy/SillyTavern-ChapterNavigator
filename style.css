@@ -1,12 +1,44 @@
+#chapter-navigator-launcher {
+  position: fixed;
+  z-index: 3006;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 58px;
+  min-height: 42px;
+  padding: 8px 11px;
+  color: var(--SmartThemeBodyColor, #e8e8e8);
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 58%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+  cursor: grab;
+  font: inherit;
+  font-size: 13px;
+  user-select: none;
+  touch-action: none;
+}
+
+#chapter-navigator-launcher:hover,
+#chapter-navigator-launcher:focus-visible,
+#chapter-navigator-launcher.is-open {
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 26%, var(--SmartThemeBlurTintColor, #111));
+}
+
+#chapter-navigator-launcher.is-dragging {
+  cursor: grabbing;
+  opacity: 0.92;
+}
+
 #chapter-navigator {
   position: fixed;
-  right: 18px;
-  bottom: 92px;
   z-index: 3005;
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
-  width: min(240px, calc(100vw - 28px));
+  width: min(270px, calc(100vw - 28px));
   padding: 10px;
   color: var(--SmartThemeBodyColor, #e8e8e8);
   background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 86%, transparent);
@@ -14,6 +46,10 @@
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(10px);
+}
+
+#chapter-navigator[hidden] {
+  display: none;
 }
 
 #chapter-navigator .chapter-navigator-title {
@@ -61,6 +97,45 @@
   font-size: 12px;
 }
 
+#chapter-navigator .chapter-navigator-jump {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+#chapter-navigator .chapter-navigator-jump-input,
+#chapter-navigator .chapter-navigator-jump-button {
+  min-height: 32px;
+  color: var(--SmartThemeBodyColor, #e8e8e8);
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #777) 60%, transparent);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+}
+
+#chapter-navigator .chapter-navigator-jump-input {
+  min-width: 0;
+  padding: 5px 8px;
+}
+
+#chapter-navigator .chapter-navigator-jump-button {
+  padding: 5px 10px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 24%, transparent);
+  border-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 55%, transparent);
+}
+
+#chapter-navigator .chapter-navigator-jump-button:hover:not(:disabled),
+#chapter-navigator .chapter-navigator-jump-button:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor, #4f8cff) 36%, transparent);
+}
+
+#chapter-navigator .chapter-navigator-jump-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 #chapter-navigator .chapter-navigator-counter,
 #chapter-navigator .chapter-navigator-empty {
   min-height: 16px;
@@ -91,10 +166,13 @@
 
 @media (max-width: 700px) {
   #chapter-navigator {
-    right: 8px;
-    bottom: 74px;
-    width: min(210px, calc(100vw - 16px));
+    width: min(230px, calc(100vw - 16px));
     padding: 8px;
+  }
+
+  #chapter-navigator-launcher {
+    min-height: 40px;
+    padding: 7px 10px;
   }
 
   #chapter-navigator .chapter-navigator-title {

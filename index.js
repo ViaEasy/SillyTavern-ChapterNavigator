@@ -1,11 +1,17 @@
 const EXTENSION_NAME = 'Message Navigator';
 const ROOT_ID = 'chapter-navigator';
+const LAUNCHER_ID = 'chapter-navigator-launcher';
 const MESSAGE_PREVIEW_LIMIT = 72;
+const POSITION_STORAGE_KEY = 'chapter-navigator-launcher-position';
+const OPEN_STORAGE_KEY = 'chapter-navigator-panel-open';
 
 let root;
+let launcher;
 let prevButton;
 let nextButton;
 let messageSelect;
+let jumpInput;
+let jumpButton;
 let counter;
 let emptyHint;
 let chatObserver;
@@ -15,6 +21,8 @@ let cachedSignature = '';
 let currentMessageIndex = -1;
 let currentMessageId = -1;
 let eventsBound = false;
+let isPanelOpen = false;
+let dragState = null;
 const cleanupCallbacks = [];
 
 function getContext() {
@@ -125,6 +133,86 @@ function collectMessages() {
     return cachedMessages;
 }
 
+function clampNumber(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function getSavedLauncherPosition() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(POSITION_STORAGE_KEY) || 'null');
+        if (Number.isFinite(saved?.left) && Number.isFinite(saved?.top)) {
+            return {
+                left: saved.left,
+                top: saved.top,
+            };
+        }
+    } catch {
+        localStorage.removeItem(POSITION_STORAGE_KEY);
+    }
+
+    return {
+        left: window.innerWidth - 76,
+        top: window.innerHeight - 160,
+    };
+}
+
+function applyLauncherPosition(position) {
+    if (!launcher) {
+        return;
+    }
+
+    const width = launcher.offsetWidth || 52;
+    const height = launcher.offsetHeight || 52;
+    const nextPosition = {
+        left: clampNumber(position.left, 8, window.innerWidth - width - 8),
+        top: clampNumber(position.top, 8, window.innerHeight - height - 8),
+    };
+
+    launcher.style.left = `${nextPosition.left}px`;
+    launcher.style.top = `${nextPosition.top}px`;
+    localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(nextPosition));
+    positionPanel();
+}
+
+function positionPanel() {
+    if (!root || !launcher) {
+        return;
+    }
+
+    const launcherRect = launcher.getBoundingClientRect();
+    const panelWidth = root.offsetWidth || 260;
+    const panelHeight = root.offsetHeight || 250;
+    const gap = 10;
+    const preferLeft = launcherRect.left + launcherRect.width + gap + panelWidth > window.innerWidth;
+    const preferTop = launcherRect.top + panelHeight > window.innerHeight;
+    const left = preferLeft
+        ? launcherRect.left - panelWidth - gap
+        : launcherRect.right + gap;
+    const top = preferTop
+        ? launcherRect.bottom - panelHeight
+        : launcherRect.top;
+
+    root.style.left = `${clampNumber(left, 8, window.innerWidth - panelWidth - 8)}px`;
+    root.style.top = `${clampNumber(top, 8, window.innerHeight - panelHeight - 8)}px`;
+}
+
+function setPanelOpen(open) {
+    isPanelOpen = open;
+    root.hidden = !isPanelOpen;
+    launcher.classList.toggle('is-open', isPanelOpen);
+    launcher.setAttribute('aria-expanded', String(isPanelOpen));
+    localStorage.setItem(OPEN_STORAGE_KEY, isPanelOpen ? '1' : '0');
+
+    if (isPanelOpen) {
+        positionPanel();
+        scheduleUpdate();
+    }
+}
+
+function togglePanel() {
+    setPanelOpen(!isPanelOpen);
+}
+
 function getCurrentMessageIndex(messages = collectMessages()) {
     if (!messages.length) {
         return -1;
@@ -186,6 +274,11 @@ function updateUi() {
     currentMessageIndex = getCurrentMessageIndex(messages);
     if (messages.length) {
         messageSelect.value = String(currentMessageIndex);
+        jumpInput.max = String(messages.length);
+        jumpInput.placeholder = `1-${messages.length}`;
+    } else {
+        jumpInput.removeAttribute('max');
+        jumpInput.placeholder = '消息序号';
     }
 
     const displayId = currentMessageId >= 0
@@ -203,6 +296,9 @@ function updateUi() {
     nextButton.title = currentMessageIndex < messages.length - 1
         ? `下一条：${messages[currentMessageIndex + 1].label}`
         : '跳到下一条聊天记录';
+    jumpInput.value = displayId > 0 ? String(displayId) : '';
+    jumpButton.disabled = !hasMessages;
+    positionPanel();
 }
 
 function scheduleUpdate() {
@@ -280,6 +376,24 @@ function jumpToMessageIndex(index) {
     jumpToMessage(target.id);
 }
 
+function jumpToNumber(rawValue) {
+    const number = Number(rawValue);
+    if (!Number.isFinite(number) || number < 1) {
+        return;
+    }
+
+    const messages = collectMessages();
+    const max = messages.length || number;
+    const messageNumber = Math.floor(clampNumber(number, 1, max));
+
+    if (messages.length) {
+        jumpToMessage(messages[messageNumber - 1].id);
+        return;
+    }
+
+    jumpToMessage(messageNumber - 1);
+}
+
 function jumpByOffset(offset) {
     const anchorMessageId = getVisibleAnchorMessageId();
 
@@ -315,11 +429,84 @@ function createButton(label, className, onClick) {
     return button;
 }
 
+function createLauncher() {
+    launcher = document.createElement('button');
+    launcher.id = LAUNCHER_ID;
+    launcher.type = 'button';
+    launcher.title = '打开消息导航，拖动可移动位置';
+    launcher.setAttribute('aria-controls', ROOT_ID);
+    launcher.setAttribute('aria-expanded', 'false');
+    launcher.append(createIcon('fa-solid fa-location-arrow'));
+    launcher.append(document.createElement('span'));
+    launcher.querySelector('span').textContent = '导航';
+    launcher.addEventListener('click', () => {
+        if (dragState?.moved) {
+            dragState.moved = false;
+            return;
+        }
+        togglePanel();
+    });
+    launcher.addEventListener('pointerdown', handleLauncherPointerDown);
+    document.body.appendChild(launcher);
+    requestAnimationFrame(() => applyLauncherPosition(getSavedLauncherPosition()));
+}
+
+function handleLauncherPointerDown(event) {
+    if (event.button !== 0) {
+        return;
+    }
+
+    const rect = launcher.getBoundingClientRect();
+    dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        left: rect.left,
+        top: rect.top,
+        moved: false,
+    };
+    launcher.setPointerCapture(event.pointerId);
+    launcher.classList.add('is-dragging');
+}
+
+function handleLauncherPointerMove(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+    }
+
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) {
+        dragState.moved = true;
+    }
+
+    applyLauncherPosition({
+        left: dragState.left + dx,
+        top: dragState.top + dy,
+    });
+}
+
+function handleLauncherPointerUp(event) {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+        return;
+    }
+
+    launcher.releasePointerCapture(event.pointerId);
+    launcher.classList.remove('is-dragging');
+    setTimeout(() => {
+        if (dragState) {
+            dragState.moved = false;
+        }
+    }, 0);
+}
+
 function createUi() {
     document.getElementById(ROOT_ID)?.remove();
+    document.getElementById(LAUNCHER_ID)?.remove();
 
     root = document.createElement('div');
     root.id = ROOT_ID;
+    root.hidden = true;
 
     const title = document.createElement('div');
     title.className = 'chapter-navigator-title';
@@ -333,6 +520,27 @@ function createUi() {
     messageSelect.title = '跳转到指定消息';
     messageSelect.addEventListener('change', () => jumpToMessageIndex(Number(messageSelect.value)));
 
+    const jumpRow = document.createElement('form');
+    jumpRow.className = 'chapter-navigator-jump';
+    jumpRow.addEventListener('submit', (event) => {
+        event.preventDefault();
+        jumpToNumber(jumpInput.value);
+    });
+
+    jumpInput = document.createElement('input');
+    jumpInput.className = 'chapter-navigator-jump-input';
+    jumpInput.type = 'number';
+    jumpInput.min = '1';
+    jumpInput.step = '1';
+    jumpInput.inputMode = 'numeric';
+    jumpInput.title = '输入消息序号';
+
+    jumpButton = document.createElement('button');
+    jumpButton.className = 'chapter-navigator-jump-button';
+    jumpButton.type = 'submit';
+    jumpButton.textContent = '跳转';
+    jumpRow.append(jumpInput, jumpButton);
+
     counter = document.createElement('div');
     counter.className = 'chapter-navigator-counter';
     counter.textContent = '0 / 0';
@@ -342,8 +550,10 @@ function createUi() {
     emptyHint.textContent = '没有聊天记录';
     emptyHint.hidden = true;
 
-    root.append(title, prevButton, messageSelect, nextButton, counter, emptyHint);
+    root.append(title, prevButton, messageSelect, nextButton, jumpRow, counter, emptyHint);
     document.body.appendChild(root);
+    createLauncher();
+    setPanelOpen(localStorage.getItem(OPEN_STORAGE_KEY) === '1');
 }
 
 function bindEvents() {
@@ -359,9 +569,15 @@ function bindEvents() {
     chat?.addEventListener('scroll', scheduleUpdate, scrollOptions);
     window.addEventListener('scroll', scheduleUpdate, scrollOptions);
     window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('pointermove', handleLauncherPointerMove);
+    window.addEventListener('pointerup', handleLauncherPointerUp);
+    window.addEventListener('pointercancel', handleLauncherPointerUp);
     cleanupCallbacks.push(() => chat?.removeEventListener('scroll', scheduleUpdate));
     cleanupCallbacks.push(() => window.removeEventListener('scroll', scheduleUpdate));
     cleanupCallbacks.push(() => window.removeEventListener('resize', scheduleUpdate));
+    cleanupCallbacks.push(() => window.removeEventListener('pointermove', handleLauncherPointerMove));
+    cleanupCallbacks.push(() => window.removeEventListener('pointerup', handleLauncherPointerUp));
+    cleanupCallbacks.push(() => window.removeEventListener('pointercancel', handleLauncherPointerUp));
 
     if (chat) {
         chatObserver = new MutationObserver(scheduleUpdate);
@@ -412,6 +628,7 @@ function unbindEvents() {
 export function onDisable() {
     unbindEvents();
     document.getElementById(ROOT_ID)?.remove();
+    document.getElementById(LAUNCHER_ID)?.remove();
 }
 
 export function onEnable() {
